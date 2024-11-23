@@ -2,43 +2,132 @@
 
 {% block content %}
 <div class="container">
-    <h1 class="mb-4">Admin Panel</h1>
+    <h1 class="mb-4">
+        <i class="fas fa-shield-alt me-2"></i>Admin Panel
+    </h1>
     
+    <!-- Quick Stats -->
+    <div class="row mb-4">
+        <div class="col-md-4 mb-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-users me-2"></i>Total Users
+                    </h5>
+                    <h2 class="mb-0">{{ users|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-file-pdf me-2"></i>Total Documents
+                    </h5>
+                    <h2 class="mb-0">{{ documents|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-user-shield me-2"></i>Admins
+                    </h5>
+                    <h2 class="mb-0">{{ users|selectattr('is_admin')|list|length }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="fas fa-search"></i>
+                        </span>
+                        <input type="text" id="userSearch" class="form-control" placeholder="Search users...">
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="fas fa-search"></i>
+                        </span>
+                        <input type="text" id="docSearch" class="form-control" placeholder="Search documents...">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Users Section -->
     <div class="card mb-4">
         <div class="card-header">
-            <h3 class="card-title mb-0">Users</h3>
+            <h3 class="card-title mb-0">
+                <i class="fas fa-users me-2"></i>User Management
+            </h3>
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover" id="usersTable">
                     <thead>
                         <tr>
-                            <th>Email</th>
-                            <th>Name</th>
-                            <th>Admin</th>
-                            <th>Documents</th>
+                            <th>User Info</th>
+                            <th>Role</th>
+                            <th>Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for user in users %}
                         <tr>
-                            <td>{{ user.email }}</td>
-                            <td>{{ user.name }}</td>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    <span class="fw-bold">{{ user.email }}</span>
+                                    {% if user.name %}
+                                    <small class="text-muted">{{ user.name }}</small>
+                                    {% endif %}
+                                </div>
+                            </td>
                             <td>
                                 {% if user.is_admin %}
                                 <span class="badge bg-primary">Admin</span>
+                                {% else %}
+                                <span class="badge bg-secondary">User</span>
                                 {% endif %}
                             </td>
-                            <td>{{ user.documents|length }}</td>
                             <td>
-                                {% if user.id != current_user.id %}
-                                <button class="btn btn-danger"
-                                        onclick="if(confirm('Are you sure you want to delete this user and all their documents?')) window.location.href='{{ url_for('main.delete_user', user_id=user.id) }}'">
-                                    <i class="fas fa-trash me-1"></i> Delete User
-                                </button>
-                                {% endif %}
+                                <span class="badge bg-info">
+                                    {{ user.documents|length }} Documents
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    {% if user.id != current_user.id %}
+                                    <button type="button" class="btn btn-sm btn-warning"
+                                            data-user-id="{{ user.id }}"
+                                            data-is-admin="{{ 'true' if user.is_admin else 'false' }}"
+                                            onclick="handleToggleAdmin(this)">
+                                        <i class="fas {% if user.is_admin %}fa-user{% else %}fa-user-shield{% endif %} me-1"></i>
+                                        <span class="d-none d-sm-inline">
+                                            {% if user.is_admin %}Remove Admin{% else %}Make Admin{% endif %}
+                                        </span>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                            data-user-email="{{ user.email }}"
+                                            data-delete-url="{{ url_for('main.delete_user', user_id=user.id) }}"
+                                            onclick="handleDeleteUser(this)">
+                                        <i class="fas fa-trash me-1"></i>
+                                        <span class="d-none d-sm-inline">Delete</span>
+                                    </button>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Current User</span>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -51,41 +140,55 @@
     <!-- Documents Section -->
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title mb-0">All Documents</h3>
+            <h3 class="card-title mb-0">
+                <i class="fas fa-file-pdf me-2"></i>Document Management
+            </h3>
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover" id="docsTable">
                     <thead>
                         <tr>
-                            <th>Filename</th>
-                            <th>Owner</th>
-                            <th>Year</th>
-                            <th>Semester</th>
-                            <th>Upload Date</th>
-                            <th style="width: 200px;">Actions</th>
+                            <th>Document Info</th>
+                            <th>Details</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for doc in documents %}
                         <tr>
                             <td>
-                                <i class="fas fa-file-pdf text-danger me-2"></i>
-                                {{ doc.original_filename }}
+                                <div class="d-flex flex-column">
+                                    <div>
+                                        <i class="fas fa-file-pdf text-danger me-2"></i>
+                                        <span class="fw-bold">{{ doc.original_filename }}</span>
+                                    </div>
+                                    <small class="text-muted">Uploaded by: {{ doc.owner.email }}</small>
+                                </div>
                             </td>
-                            <td>{{ doc.owner.email }}</td>
-                            <td>{{ doc.year }}</td>
-                            <td>{{ doc.semester }}</td>
-                            <td>{{ doc.upload_date.strftime('%Y-%m-%d %H:%M') }}</td>
                             <td>
-                                <div class="btn-group" role="group">
+                                <div class="d-flex flex-column">
+                                    <span class="badge bg-info mb-1">Year: {{ doc.year }}</span>
+                                    <span class="badge bg-secondary mb-1">Semester: {{ doc.semester }}</span>
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock me-1"></i>
+                                        {{ doc.upload_date.strftime('%Y-%m-%d %H:%M') }}
+                                    </small>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="btn-group">
                                     <a href="{{ url_for('main.download', document_id=doc.id) }}" 
-                                       class="btn btn-primary">
-                                        <i class="fas fa-download me-1"></i> Download
+                                       class="btn btn-sm btn-primary">
+                                        <i class="fas fa-download me-1"></i>
+                                        <span class="d-none d-sm-inline">Download</span>
                                     </a>
-                                    <button class="btn btn-danger"
-                                            onclick="if(confirm('Are you sure you want to delete this document?')) window.location.href='{{ url_for('main.delete_document', doc_id=doc.id) }}'">
-                                        <i class="fas fa-trash me-1"></i> Delete
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                            data-doc-name="{{ doc.original_filename }}"
+                                            data-delete-url="{{ url_for('main.delete_document', doc_id=doc.id) }}"
+                                            onclick="handleDeleteDocument(this)">
+                                        <i class="fas fa-trash me-1"></i>
+                                        <span class="d-none d-sm-inline">Delete</span>
                                     </button>
                                 </div>
                             </td>
@@ -93,6 +196,32 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                    Confirm Delete
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="deleteMessage" class="mb-0"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cancel
+                </button>
+                <a href="#" id="confirmDeleteBtn" class="btn btn-danger">
+                    <i class="fas fa-trash me-1"></i>Delete
+                </a>
             </div>
         </div>
     </div>
@@ -106,5 +235,91 @@
     .btn-group .btn {
         white-space: nowrap;
     }
+    .card-title {
+        margin-bottom: 0;
+    }
+    @media (max-width: 768px) {
+        .table td {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .btn-group {
+            flex-direction: column;
+            width: 100%;
+        }
+        .btn-group .btn {
+            width: 100%;
+            margin-bottom: 0.25rem;
+        }
+        .badge {
+            display: inline-block;
+            margin-bottom: 0.25rem;
+        }
+    }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize search functionality
+    initializeSearch('userSearch', 'usersTable');
+    initializeSearch('docSearch', 'docsTable');
+});
+
+function initializeSearch(inputId, tableId) {
+    const searchInput = document.getElementById(inputId);
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', function(e) {
+        const searchText = e.target.value.toLowerCase();
+        const rows = document.querySelectorAll(`#${tableId} tbody tr`);
+        
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(searchText) ? '' : 'none';
+        });
+    });
+}
+
+function handleToggleAdmin(button) {
+    const userId = button.getAttribute('data-user-id');
+    const isAdmin = button.getAttribute('data-is-admin') === 'true';
+    const action = isAdmin ? 'remove' : 'grant';
+    
+    if (confirm(`Are you sure you want to ${action} admin privileges?`)) {
+        window.location.href = "{{ url_for('main.toggle_admin', user_id=0) }}".replace('0', userId);
+    }
+}
+
+function handleDeleteUser(button) {
+    showDeleteConfirmation(
+        'user',
+        button.getAttribute('data-user-email'),
+        button.getAttribute('data-delete-url')
+    );
+}
+
+function handleDeleteDocument(button) {
+    showDeleteConfirmation(
+        'document',
+        button.getAttribute('data-doc-name'),
+        button.getAttribute('data-delete-url')
+    );
+}
+
+function showDeleteConfirmation(type, name, url) {
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    const message = document.getElementById('deleteMessage');
+    const confirmBtn = document.getElementById('confirmDeleteBtn');
+    
+    const messages = {
+        user: `This will permanently delete user "${name}" and all their documents.`,
+        document: `This will permanently delete document "${name}".`
+    };
+    
+    message.innerHTML = `<strong>Warning:</strong> ${messages[type]} This action cannot be undone.`;
+    confirmBtn.href = url;
+    modal.show();
+}
+</script>
 {% endblock %}
