@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-center">Upload PDF Document</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('main.upload') }}" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="pdf_file" class="form-label">Select PDF File</label>
+                        <input type="file" class="form-control" id="pdf_file" name="pdf_file" accept=".pdf" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="year" class="form-label">Year</label>
+                                <select class="form-select" id="year" name="year" required>
+                                    <option value="">Select Year</option>
+                                    {% for year in range(2020, 2025) %}
+                                    <option value="{{ year }}">{{ year }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="semester" class="form-label">Semester</label>
+                                <select class="form-select" id="semester" name="semester" required>
+                                    <option value="">Select Semester</option>
+                                    {% for sem in range(1, 9) %}
+                                    <option value="{{ sem }}">Semester {{ sem }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Upload Document</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

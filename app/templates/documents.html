@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="mb-0">Documents</h3>
+                <div>
+                    {% if current_user.is_admin %}
+                    <a href="{{ url_for('main.admin_panel') }}" class="btn btn-info me-2">
+                        <i class="fas fa-cog me-2"></i>Admin Panel
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('main.upload') }}" class="btn btn-primary">
+                        <i class="fas fa-upload me-2"></i>Upload New
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                {% if documents %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>File Name</th>
+                                <th>Year</th>
+                                <th>Semester</th>
+                                <th>Upload Date</th>
+                                <th>Download</th>
+                                <th>Time Remaining</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for doc in documents %}
+                            <tr>
+                                <td>
+                                    <i class="fas fa-file-pdf text-danger me-2"></i>
+                                    {{ doc.original_filename }}
+                                </td>
+                                <td>{{ doc.year }}</td>
+                                <td>{{ doc.semester }}</td>
+                                <td>{{ doc.upload_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    <a href="{{ url_for('main.download', document_id=doc.id) }}" 
+                                       class="btn btn-sm btn-primary">
+                                        <i class="fas fa-download me-1"></i>Download
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="text-warning">
+                                        <i class="fas fa-clock me-1"></i>
+                                        <span class="countdown" 
+                                              data-expiry="{{ doc.expiration_date.strftime('%Y-%m-%d %H:%M:%S') }}"
+                                              data-id="{{ doc.id }}">
+                                            Calculating...
+                                        </span>
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info" role="alert">
+                    <i class="fas fa-info-circle me-2"></i>
+                    No documents found. <a href="{{ url_for('main.upload') }}" class="alert-link">Upload a new document</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-hide alerts after 5 seconds (except danger alerts)
+    const alerts = document.querySelectorAll('.alert:not(.alert-danger)');
+    alerts.forEach(function(alert) {
+        setTimeout(function() {
+            const bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
+            bsAlert.close();
+        }, 5000);
+    });
+
+    // Update all countdown timers
+    function updateCountdowns() {
+        document.querySelectorAll('.countdown').forEach(function(element) {
+            try {
+                const expiryDateStr = element.dataset.expiry;
+                const docId = element.dataset.id;
+                console.log(`Document ${docId} - Expiry date string:`, expiryDateStr);
+
+                // Parse the date directly
+                const expiryDate = new Date(expiryDateStr.replace(' ', 'T') + 'Z');
+                const now = new Date();
+                
+                console.log(`Document ${docId} - Parsed expiry date:`, expiryDate);
+                console.log(`Document ${docId} - Current time:`, now);
+                
+                const diff = expiryDate.getTime() - now.getTime();
+                console.log(`Document ${docId} - Time difference (ms):`, diff);
+
+                if (diff <= 0) {
+                    element.innerHTML = '<span class="text-danger">Expired</span>';
+                    return;
+                }
+
+                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+                console.log(`Document ${docId} - Days:${days}, Hours:${hours}, Minutes:${minutes}`);
+
+                let timeText = '';
+                if (days > 0) {
+                    timeText = `${days}d ${hours}h`;
+                } else if (hours > 0) {
+                    timeText = `${hours}h ${minutes}m`;
+                } else {
+                    timeText = `${minutes}m`;
+                }
+
+                // Add warning classes for last 12 hours
+                if (diff < (12 * 60 * 60 * 1000)) {
+                    element.classList.add('text-danger');
+                    element.closest('span').classList.remove('text-warning');
+                    element.closest('span').classList.add('text-danger');
+                }
+
+                element.innerHTML = timeText + ' remaining';
+            } catch (error) {
+                console.error('Error updating countdown:', error);
+                element.innerHTML = 'Error calculating time';
+            }
+        });
+    }
+
+    // Update countdown immediately and then every minute
+    updateCountdowns();
+    setInterval(updateCountdowns, 60000);
+});
+</script>
+{% endblock %}
