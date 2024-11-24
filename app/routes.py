@@ -151,8 +151,8 @@ def upload_post():
             flash('Invalid year or semester value', 'danger')
             return redirect(url_for('main.upload'))
 
-        if semester not in [1, 2]:
-            flash('Semester must be either 1 or 2', 'danger')
+        if semester < 1 or semester > 8:
+            flash('Semester must be between 1 and 8', 'danger')
             return redirect(url_for('main.upload'))
 
         # Generate unique filename
@@ -190,6 +190,8 @@ def upload_post():
 def delete_document(doc_id):
     try:
         doc = Document.query.get_or_404(doc_id)
+        
+        # Check if user owns the document
         if doc.user_id != current_user.id:
             flash('You do not have permission to delete this document.', 'danger')
             return redirect(url_for('main.documents'))
@@ -213,19 +215,27 @@ def download(document_id):
     try:
         document = Document.query.get_or_404(document_id)
         
-        if document.expiration_date < datetime.utcnow():
-            flash('This document has expired.', 'danger')
-            return redirect(url_for('main.documents'))
-            
+        # Check if user owns the document
         if document.user_id != current_user.id:
             flash('You do not have permission to download this document.', 'danger')
             return redirect(url_for('main.documents'))
-            
+        
+        # Check if file exists
+        if not os.path.exists(document.file_path):
+            flash('Document file not found.', 'danger')
+            return redirect(url_for('main.documents'))
+        
+        # Check expiration
+        if document.expiration_date and document.expiration_date < datetime.utcnow():
+            flash('This document has expired.', 'danger')
+            return redirect(url_for('main.documents'))
+        
         return send_file(
             document.file_path,
             as_attachment=True,
             download_name=document.original_filename
         )
+        
     except Exception as e:
         flash('An error occurred while downloading the document.', 'danger')
         return redirect(url_for('main.documents'))
