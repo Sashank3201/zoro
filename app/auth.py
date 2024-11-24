@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import login_user, logout_user, login_required
+from werkzeug.security import generate_password_hash
+from flask_login import login_user, logout_user, login_required, current_user
 from .models import User
 from . import db
 
@@ -8,6 +8,9 @@ auth = Blueprint('auth', __name__)
 
 @auth.route('/signup', methods=['GET', 'POST'])
 def signup():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.dashboard'))
+
     if request.method == 'POST':
         email = request.form.get('email')
         password = request.form.get('password')
@@ -15,25 +18,26 @@ def signup():
 
         user = User.query.filter_by(email=email).first()
         if user:
-            flash('Email already exists')
+            flash('Email already exists', 'danger')
             return redirect(url_for('auth.signup'))
 
-        new_user = User(email=email,
-                       name=name,
-                       password=generate_password_hash(password, method='pbkdf2:sha256'))
+        new_user = User(email=email, name=name)
+        new_user.set_password(password)
 
         db.session.add(new_user)
         db.session.commit()
 
-        # Log in the user after signup
         login_user(new_user)
-        flash('Account created successfully!')
+        flash('Account created successfully!', 'success')
         return redirect(url_for('main.dashboard'))
 
     return render_template('signup.html')
 
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.dashboard'))
+
     if request.method == 'POST':
         email = request.form.get('email')
         password = request.form.get('password')
@@ -41,11 +45,12 @@ def login():
 
         user = User.query.filter_by(email=email).first()
 
-        if not user or not check_password_hash(user.password, password):
-            flash('Please check your login details and try again.')
+        if not user or not user.check_password(password):
+            flash('Please check your login details and try again.', 'danger')
             return redirect(url_for('auth.login'))
 
         login_user(user, remember=remember)
+        flash('Logged in successfully!', 'success')
         return redirect(url_for('main.dashboard'))
 
     return render_template('login.html')
@@ -54,4 +59,5 @@ def login():
 @login_required
 def logout():
     logout_user()
+    flash('Logged out successfully.', 'success')
     return redirect(url_for('main.index'))

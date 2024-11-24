@@ -1,9 +1,8 @@
 from flask import Blueprint, render_template, flash, redirect, url_for, request, send_file, current_app, send_from_directory
-from flask_login import login_required, current_user, login_user, logout_user
+from flask_login import login_required, current_user
 from app import db
 from app.models import Document, User
 from functools import wraps
-from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import os
 from datetime import datetime, timedelta
@@ -21,8 +20,11 @@ def index():
 def dashboard():
     try:
         # Get document statistics
-        total_documents = Document.query.count()
-        active_documents = Document.query.filter(Document.expiration_date > datetime.utcnow()).count()
+        total_documents = Document.query.filter_by(user_id=current_user.id).count()
+        active_documents = Document.query.filter(
+            Document.user_id == current_user.id,
+            Document.expiration_date > datetime.utcnow()
+        ).count()
         current_year = datetime.utcnow().year
 
         return render_template('dashboard.html',
@@ -33,26 +35,24 @@ def dashboard():
         flash('An error occurred while loading the dashboard.', 'danger')
         return redirect(url_for('main.index'))
 
-@main.route('/login', methods=['GET'])
+@main.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        remember = True if request.form.get('remember') else False
+
+        user = User.query.filter_by(email=email).first()
+
+        if not user or not user.check_password(password):
+            flash('Please check your login details and try again.', 'danger')
+            return redirect(url_for('main.login'))
+
+        login_user(user, remember=remember)
+        return redirect(url_for('main.dashboard'))
     return render_template('login.html')
-
-@main.route('/login', methods=['POST'])
-def login_post():
-    email = request.form.get('email')
-    password = request.form.get('password')
-    remember = True if request.form.get('remember') else False
-
-    user = User.query.filter_by(email=email).first()
-
-    if not user or not check_password_hash(user.password, password):
-        flash('Please check your login details and try again.', 'danger')
-        return redirect(url_for('main.login'))
-
-    login_user(user, remember=remember)
-    return redirect(url_for('main.dashboard'))
 
 @main.route('/signup', methods=['GET'])
 def signup():
