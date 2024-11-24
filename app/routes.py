@@ -72,15 +72,13 @@ def signup_post():
         flash('Email address already exists', 'danger')
         return redirect(url_for('main.signup'))
 
-    # Create new user with is_admin=True if it's the first user
-    is_admin = User.query.count() == 0
-    
-    new_user = User(email=email, name=name, is_admin=is_admin)
-    new_user.password = generate_password_hash(password)
+    new_user = User(email=email, name=name)
+    new_user.set_password(password)
 
     db.session.add(new_user)
     db.session.commit()
 
+    flash('Registration successful! Please log in.', 'success')
     return redirect(url_for('main.login'))
 
 @main.route('/logout')
