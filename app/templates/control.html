@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Page Title -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-cogs me-2"></i>Control Panel</h2>
+    </div>
+
+    <!-- Overview Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-users fa-3x mb-3"></i>
+                    <h5 class="card-title">Users</h5>
+                    <h2 class="mb-0">{{ users|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-file-pdf fa-3x mb-3"></i>
+                    <h5 class="card-title">Documents</h5>
+                    <h2 class="mb-0">{{ documents|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-info text-white h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-user-shield fa-3x mb-3"></i>
+                    <h5 class="card-title">Administrators</h5>
+                    <h2 class="mb-0">{{ users|selectattr('is_admin', 'eq', True)|list|length }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Management Section -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="fas fa-users me-2"></i>User Management</h4>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>User Details</th>
+                            <th>Status</th>
+                            <th>Documents</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    <span class="fw-bold">{{ user.email }}</span>
+                                    {% if user.name %}
+                                    <small class="text-muted">{{ user.name }}</small>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge {% if user.is_admin %}bg-primary{% else %}bg-secondary{% endif %}">
+                                    {% if user.is_admin %}Administrator{% else %}User{% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-info">
+                                    {{ user.documents|length }} Documents
+                                </span>
+                            </td>
+                            <td>
+                                {% if user.id != current_user.id %}
+                                <div class="btn-group">
+                                    <a href="{{ url_for('main.control_toggle_admin', user_id=user.id) }}" 
+                                       class="btn btn-outline-primary btn-sm"
+                                       onclick="return confirm('Are you sure you want to {% if user.is_admin %}remove{% else %}grant{% endif %} administrator privileges?')">
+                                        {% if user.is_admin %}
+                                        <i class="fas fa-user me-1"></i>Remove Admin
+                                        {% else %}
+                                        <i class="fas fa-user-shield me-1"></i>Make Admin
+                                        {% endif %}
+                                    </a>
+                                    <a href="{{ url_for('main.control_delete_user', user_id=user.id) }}" 
+                                       class="btn btn-outline-danger btn-sm"
+                                       onclick="return confirm('Are you sure you want to delete this user? This action cannot be undone.')">
+                                        <i class="fas fa-trash-alt me-1"></i>Delete
+                                    </a>
+                                </div>
+                                {% else %}
+                                <span class="badge bg-secondary">Current User</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Management Section -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="fas fa-file-pdf me-2"></i>Document Management</h4>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Document Details</th>
+                            <th>Upload Info</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in documents %}
+                        <tr>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    <div>
+                                        <i class="fas fa-file-pdf text-danger me-2"></i>
+                                        <span class="fw-bold">{{ doc.original_filename }}</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        Year {{ doc.year }} - Semester {{ doc.semester }}
+                                    </small>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    <small class="text-muted">
+                                        <i class="fas fa-user me-1"></i>{{ doc.owner.email }}
+                                    </small>
+                                    <small class="text-muted">
+                                        <i class="fas fa-calendar me-1"></i>{{ doc.upload_date.strftime('%Y-%m-%d') }}
+                                    </small>
+                                </div>
+                            </td>
+                            <td>
+                                {% if doc.is_expired() %}
+                                <span class="badge bg-danger">Expired</span>
+                                {% else %}
+                                <span class="badge bg-success">Active</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{{ url_for('main.download', document_id=doc.id) }}" 
+                                       class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-download me-1"></i>Download
+                                    </a>
+                                    <a href="{{ url_for('main.delete_document', doc_id=doc.id) }}" 
+                                       class="btn btn-outline-danger btn-sm"
+                                       onclick="return confirm('Are you sure you want to delete this document? This action cannot be undone.')">
+                                        <i class="fas fa-trash-alt me-1"></i>Delete
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.btn-group {
+    gap: 0.25rem;
+}
+.card {
+    border: none;
+    transition: all 0.3s ease;
+}
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important;
+}
+.table td {
+    padding: 1rem;
+}
+.badge {
+    font-weight: 500;
+}
+@media (max-width: 768px) {
+    .btn-group {
+        flex-direction: column;
+        width: 100%;
+    }
+    .btn-group .btn {
+        width: 100%;
+        margin-bottom: 0.25rem;
+    }
+}
+</style>
+{% endblock %}

@@ -12,7 +12,6 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(100), unique=True)
     name = db.Column(db.String(100))
     password = db.Column(db.String(100))
-    is_admin = db.Column(db.Boolean, default=False)
     documents = db.relationship('Document', backref='owner', lazy=True, cascade="all, delete-orphan")
 
     def set_password(self, password):

@@ -10,15 +10,6 @@ from datetime import datetime, timedelta
 
 main = Blueprint('main', __name__)
 
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.is_admin:
-            flash('You need admin privileges to access this page.', 'danger')
-            return redirect(url_for('main.dashboard'))
-        return f(*args, **kwargs)
-    return decorated_function
-
 @main.route('/')
 def index():
     if current_user.is_authenticated:
@@ -28,9 +19,21 @@ def index():
 @main.route('/dashboard')
 @login_required
 def dashboard():
-    return render_template('dashboard.html')
+    try:
+        # Get document statistics
+        total_documents = Document.query.count()
+        active_documents = Document.query.filter(Document.expiration_date > datetime.utcnow()).count()
+        current_year = datetime.utcnow().year
 
-@main.route('/login')
+        return render_template('dashboard.html',
+                             total_documents=total_documents,
+                             active_documents=active_documents,
+                             current_year=current_year)
+    except Exception as e:
+        flash('An error occurred while loading the dashboard.', 'danger')
+        return redirect(url_for('main.index'))
+
+@main.route('/login', methods=['GET'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
@@ -44,14 +47,14 @@ def login_post():
 
     user = User.query.filter_by(email=email).first()
 
-    if not user or not user.check_password(password):
+    if not user or not check_password_hash(user.password, password):
         flash('Please check your login details and try again.', 'danger')
         return redirect(url_for('main.login'))
 
     login_user(user, remember=remember)
     return redirect(url_for('main.dashboard'))
 
-@main.route('/signup')
+@main.route('/signup', methods=['GET'])
 def signup():
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
@@ -73,7 +76,7 @@ def signup_post():
     is_admin = User.query.count() == 0
     
     new_user = User(email=email, name=name, is_admin=is_admin)
-    new_user.set_password(password)
+    new_user.password = generate_password_hash(password)
 
     db.session.add(new_user)
     db.session.commit()
@@ -101,27 +104,33 @@ def documents():
         query = query.filter_by(year=year)
     if semester:
         query = query.filter_by(semester=semester)
-        
+    
     # Get all documents
-    documents = query.order_by(Document.upload_date.desc()).all()
-    return render_template('documents.html', documents=documents)
+    documents = query.all()
+    
+    # Get unique years and semesters for filter dropdowns
+    years = sorted(list(set(doc.year for doc in Document.query.all())))
+    semesters = sorted(list(set(doc.semester for doc in Document.query.all())))
+    
+    return render_template('documents.html', 
+                         documents=documents,
+                         years=years,
+                         semesters=semesters)
 
 @main.route('/upload')
 @login_required
-@admin_required
 def upload():
     return render_template('upload.html')
 
 @main.route('/upload', methods=['POST'])
 @login_required
-@admin_required
 def upload_post():
     try:
-        if 'pdf_file' not in request.files:
+        if 'pdf' not in request.files:
             flash('No file selected', 'danger')
             return redirect(url_for('main.upload'))
-        
-        file = request.files['pdf_file']
+
+        file = request.files['pdf']
         if file.filename == '':
             flash('No file selected', 'danger')
             return redirect(url_for('main.upload'))
@@ -132,50 +141,73 @@ def upload_post():
 
         year = request.form.get('year')
         semester = request.form.get('semester')
-        
+
         if not year or not semester:
-            flash('Year and semester are required', 'danger')
+            flash('Please provide both year and semester', 'danger')
             return redirect(url_for('main.upload'))
 
-        # Create a unique filename
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"{timestamp}_{secure_filename(file.filename)}"
-        
-        # Save the file
-        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
-        print(f"Attempting to save file to: {file_path}")  # Debug log
-        
         try:
-            file.save(file_path)
-            print(f"File saved successfully to: {file_path}")  # Debug log
-        except Exception as save_error:
-            print(f"Error saving file: {str(save_error)}")  # Debug log
-            raise save_error
+            year = int(year)
+            semester = int(semester)
+        except ValueError:
+            flash('Invalid year or semester value', 'danger')
+            return redirect(url_for('main.upload'))
+
+        if semester not in [1, 2]:
+            flash('Semester must be either 1 or 2', 'danger')
+            return redirect(url_for('main.upload'))
+
+        # Generate unique filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        original_filename = secure_filename(file.filename)
+        filename = f"{timestamp}_{original_filename}"
+
+        # Save file
+        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
 
         # Create document record
         document = Document(
             filename=filename,
-            original_filename=file.filename,
-            file_path=file_path,  # Add the file path
-            year=int(year),
-            semester=int(semester),
-            owner=current_user,
-            upload_date=datetime.utcnow(),
+            original_filename=original_filename,
+            file_path=file_path,
+            year=year,
+            semester=semester,
+            user_id=current_user.id,
             expiration_date=datetime.utcnow() + timedelta(days=2)
         )
-        
+
         db.session.add(document)
         db.session.commit()
-        print(f"Document record created successfully: {document.id}")  # Debug log
-        
+
         flash('Document uploaded successfully!', 'success')
         return redirect(url_for('main.documents'))
-        
+
     except Exception as e:
-        print(f"Upload error: {str(e)}")  # Debug log
-        db.session.rollback()
-        flash(f'Error uploading document: {str(e)}', 'danger')
+        flash('An error occurred while uploading the document.', 'danger')
         return redirect(url_for('main.upload'))
+
+@main.route('/delete_document/<int:doc_id>')
+@login_required
+def delete_document(doc_id):
+    try:
+        doc = Document.query.get_or_404(doc_id)
+        if doc.user_id != current_user.id:
+            flash('You do not have permission to delete this document.', 'danger')
+            return redirect(url_for('main.documents'))
+            
+        # Delete physical file
+        if os.path.exists(doc.file_path):
+            os.remove(doc.file_path)
+            
+        # Delete database record
+        db.session.delete(doc)
+        db.session.commit()
+        flash(f'Document {doc.original_filename} has been deleted.', 'success')
+    except Exception as e:
+        flash('An error occurred while deleting the document.', 'danger')
+        
+    return redirect(url_for('main.documents'))
 
 @main.route('/download/<int:document_id>')
 @login_required
@@ -183,104 +215,19 @@ def download(document_id):
     try:
         document = Document.query.get_or_404(document_id)
         
-        if document.is_expired():
-            flash('This document has expired and is no longer available for download.', 'warning')
+        if document.expiration_date < datetime.utcnow():
+            flash('This document has expired.', 'danger')
             return redirect(url_for('main.documents'))
             
-        print(f"Attempting to download file: {document.filename}")  # Debug log
-        print(f"File path: {os.path.join(current_app.config['UPLOAD_FOLDER'], document.filename)}")  # Debug log
-        
-        if not os.path.exists(os.path.join(current_app.config['UPLOAD_FOLDER'], document.filename)):
-            print(f"File not found in uploads directory")  # Debug log
-            flash('File not found in the system.', 'danger')
+        if document.user_id != current_user.id:
+            flash('You do not have permission to download this document.', 'danger')
             return redirect(url_for('main.documents'))
             
-        try:
-            return send_file(
-                os.path.join(current_app.config['UPLOAD_FOLDER'], document.filename),
-                download_name=document.original_filename,
-                as_attachment=True
-            )
-        except Exception as e:
-            print(f"Error sending file: {str(e)}")  # Debug log
-            raise e
-            
+        return send_file(
+            document.file_path,
+            as_attachment=True,
+            download_name=document.original_filename
+        )
     except Exception as e:
-        print(f"Download error: {str(e)}")  # Debug log
-        flash(f'Error downloading file: {str(e)}', 'danger')
+        flash('An error occurred while downloading the document.', 'danger')
         return redirect(url_for('main.documents'))
-
-@main.route('/delete/<int:document_id>')
-@login_required
-@admin_required
-def delete(document_id):
-    document = Document.query.get_or_404(document_id)
-    
-    if document.owner != current_user and not current_user.is_admin:
-        flash('Access denied', 'danger')
-        return redirect(url_for('main.documents'))
-    
-    try:
-        # Delete the physical file
-        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], document.filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        
-        # Delete the database record
-        db.session.delete(document)
-        db.session.commit()
-        
-        flash('Document deleted successfully!', 'success')
-        
-    except Exception as e:
-        db.session.rollback()
-        flash('Error removing document: ' + str(e))
-    
-    return redirect(url_for('main.documents'))
-
-@main.route('/admin')
-@login_required
-@admin_required
-def admin_panel():
-    users = User.query.all()
-    documents = Document.query.all()
-    return render_template('admin.html', users=users, documents=documents)
-
-@main.route('/admin/delete_user/<int:user_id>')
-@login_required
-@admin_required
-def delete_user(user_id):
-    if current_user.id == user_id:
-        flash('You cannot delete your own account!', 'danger')
-        return redirect(url_for('main.admin_panel'))
-    
-    user = User.query.get_or_404(user_id)
-    
-    # Delete user's documents
-    for doc in user.documents:
-        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], doc.filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-    
-    db.session.delete(user)
-    db.session.commit()
-    
-    flash(f'User {user.email} has been deleted', 'success')
-    return redirect(url_for('main.admin_panel'))
-
-@main.route('/admin/delete_document/<int:doc_id>')
-@login_required
-@admin_required
-def delete_document(doc_id):
-    doc = Document.query.get_or_404(doc_id)
-    
-    # Delete physical file
-    file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], doc.filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-    
-    db.session.delete(doc)
-    db.session.commit()
-    
-    flash(f'Document {doc.original_filename} has been deleted', 'success')
-    return redirect(url_for('main.admin_panel'))
